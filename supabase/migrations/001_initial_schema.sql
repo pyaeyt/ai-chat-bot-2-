@@ -141,6 +141,7 @@ ALTER TABLE public.ai_chat_sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Students can view own sessions" ON public.ai_chat_sessions FOR SELECT USING (auth.uid() = student_id);
 CREATE POLICY "Students can create sessions" ON public.ai_chat_sessions FOR INSERT WITH CHECK (auth.uid() = student_id);
 CREATE POLICY "Students can update own sessions" ON public.ai_chat_sessions FOR UPDATE USING (auth.uid() = student_id);
+CREATE POLICY "Students can delete own sessions" ON public.ai_chat_sessions FOR DELETE USING (auth.uid() = student_id);
 
 -- AI Messages
 ALTER TABLE public.ai_messages ENABLE ROW LEVEL SECURITY;

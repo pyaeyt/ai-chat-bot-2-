@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/hooks/useUser'
@@ -17,6 +17,7 @@ export default function TeacherSubjectsPage() {
   const { profile } = useUser()
   const router = useRouter()
   const [subjects, setSubjects] = useState<(Subject & { info_count: number })[]>([])
+  const [subjectQuery, setSubjectQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [newName, setNewName] = useState('')
@@ -46,6 +47,16 @@ export default function TeacherSubjectsPage() {
   useEffect(() => {
     fetchSubjects()
   }, [profile])
+
+  const filteredSubjects = useMemo(() => {
+    const q = subjectQuery.trim().toLowerCase()
+    if (!q) return subjects
+    return subjects.filter((s) => {
+      const name = s.name.toLowerCase()
+      const desc = (s.description || '').toLowerCase()
+      return name.includes(q) || desc.includes(q)
+    })
+  }, [subjects, subjectQuery])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,12 +93,12 @@ export default function TeacherSubjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-xl font-bold text-text">Your Subjects</h2>
           <p className="text-sm text-text-light mt-1">Manage courses and add information for students</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        <Button onClick={() => setShowModal(true)} className="w-full sm:w-auto shrink-0 touch-manipulation">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -104,8 +115,42 @@ export default function TeacherSubjectsPage() {
           <p className="text-sm text-text-light/70 mt-1">Add your first subject to get started</p>
         </Card>
       ) : (
+        <>
+          <div className="relative w-full max-w-md mb-4">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-light pointer-events-none">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </span>
+            <input
+              type="search"
+              value={subjectQuery}
+              onChange={(e) => setSubjectQuery(e.target.value)}
+              placeholder="Search your subjects…"
+              className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-white text-text placeholder:text-text-light/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              aria-label="Search subjects"
+            />
+          </div>
+
+          {filteredSubjects.length === 0 ? (
+            <Card className="text-center py-8">
+              <p className="text-text-light">No subjects match &ldquo;{subjectQuery.trim()}&rdquo;.</p>
+              <button
+                type="button"
+                onClick={() => setSubjectQuery('')}
+                className="text-sm text-primary font-medium mt-2 hover:underline"
+              >
+                Clear search
+              </button>
+            </Card>
+          ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {subjects.map((subject) => (
+          {filteredSubjects.map((subject) => (
             <Card key={subject.id} hover onClick={() => router.push(`/teacher/subjects/${subject.id}`)}>
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
@@ -132,6 +177,8 @@ export default function TeacherSubjectsPage() {
             </Card>
           ))}
         </div>
+          )}
+        </>
       )}
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add New Subject">

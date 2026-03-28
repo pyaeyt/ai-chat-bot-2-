@@ -7,6 +7,7 @@ import { useUser } from '@/hooks/useUser'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
+import ChatThreadShell from '@/components/dashboard/ChatThreadShell'
 import { cn } from '@/lib/utils'
 import type { AiMessage, Subject } from '@/types'
 
@@ -22,6 +23,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     async function fetchSession() {
@@ -76,17 +78,23 @@ export default function ChatPage() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ sessionId, message: userMessage }),
       })
 
       const data = await res.json()
 
       if (data.error) {
+        const detail =
+          typeof data.error === 'string'
+            ? data.error
+            : 'Sorry, something went wrong. Please try again.'
         const errorMsg: AiMessage = {
           id: 'temp-error-' + Date.now(),
           session_id: sessionId,
           role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
+          content:
+            detail.length > 320 ? detail.slice(0, 317) + '…' : detail,
           needs_teacher: false,
           created_at: new Date().toISOString(),
         }
@@ -115,6 +123,26 @@ export default function ChatPage() {
     }
 
     setSending(false)
+  }
+
+  const deleteConversation = async () => {
+    if (!confirm('Delete this conversation? All messages will be removed.')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/chat-sessions/${sessionId}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(typeof data.error === 'string' ? data.error : 'Delete failed')
+        return
+      }
+      router.push('/student/ai-chats')
+      router.refresh()
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const handleChatWithTeacher = async (teacherId: string, subjectId: string) => {
@@ -151,15 +179,23 @@ export default function ChatPage() {
     }
   }
 
-  if (loading) return <Spinner className="mt-12" />
+  if (loading) {
+    return (
+      <div className="flex flex-1 min-h-[50dvh] items-center justify-center">
+        <Spinner className="w-8 h-8" />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] -m-6">
+    <ChatThreadShell>
       {/* Chat Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-white">
+      <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-white shrink-0">
         <button
-          onClick={() => router.push('/student')}
-          className="p-2 rounded-xl hover:bg-surface-dark transition-colors"
+          type="button"
+          onClick={() => router.push('/student/ai-chats')}
+          className="p-2 rounded-xl hover:bg-surface-dark transition-colors touch-manipulation shrink-0"
+          aria-label="Back to AI chats"
         >
           <svg className="w-5 h-5 text-text-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -169,10 +205,30 @@ export default function ChatPage() {
           <h3 className="font-semibold text-text truncate">AI Chat</h3>
           {subject && <Badge variant="primary" className="mt-0.5">{subject.name}</Badge>}
         </div>
+        <button
+          type="button"
+          title="Delete conversation"
+          disabled={deleting}
+          onClick={deleteConversation}
+          className="p-2 rounded-xl text-text-light hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex-shrink-0 touch-manipulation"
+        >
+          {deleting ? (
+            <span className="block w-5 h-5 border-2 border-red-200 border-t-red-500 rounded-full animate-spin" />
+          ) : (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-3 sm:py-4 space-y-4 bg-surface">
         {messages.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white mx-auto mb-4 shadow-lg">
@@ -181,7 +237,9 @@ export default function ChatPage() {
               </svg>
             </div>
             <h3 className="font-semibold text-text">Ask me anything about {subject?.name || 'this subject'}!</h3>
-            <p className="text-sm text-text-light mt-1">I&apos;ll answer based on information provided by your teacher</p>
+            <p className="text-sm text-text-light mt-1">
+              Use any language you prefer—the assistant will reply in the same language, using only your teacher&apos;s materials.
+            </p>
           </div>
         )}
 
@@ -189,12 +247,14 @@ export default function ChatPage() {
           <div key={msg.id} className="animate-fade-in-up">
             <div className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
               <div className={cn(
-                'max-w-[80%] rounded-2xl px-4 py-3',
+                'max-w-[min(92%,36rem)] sm:max-w-[80%] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3',
                 msg.role === 'user'
                   ? 'bg-primary text-white rounded-br-md'
                   : 'bg-white border border-border text-text rounded-bl-md shadow-sm'
               )}>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed" dir="auto">
+                  {msg.content}
+                </p>
               </div>
             </div>
             {/* Chat with Teacher button */}
@@ -231,23 +291,27 @@ export default function ChatPage() {
       </div>
 
       {/* Input */}
-      <form onSubmit={sendMessage} className="px-6 py-4 border-t border-border bg-white">
-        <div className="flex gap-3">
+      <form
+        onSubmit={sendMessage}
+        className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-white shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex gap-2 sm:gap-3 max-w-4xl mx-auto w-full">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question..."
-            className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-text placeholder:text-text-light/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            placeholder="Ask in any language…"
+            className="flex-1 min-w-0 px-3.5 py-3 sm:px-4 text-base sm:text-sm rounded-xl border border-border bg-surface text-text placeholder:text-text-light/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             disabled={sending}
+            enterKeyHint="send"
           />
-          <Button type="submit" disabled={!input.trim() || sending} className="px-5">
+          <Button type="submit" disabled={!input.trim() || sending} className="px-4 sm:px-5 shrink-0 touch-manipulation">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </Button>
         </div>
       </form>
-    </div>
+    </ChatThreadShell>
   )
 }

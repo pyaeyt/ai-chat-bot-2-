@@ -12,20 +12,36 @@ export async function POST(request: Request) {
 
   const { sessionId, message } = await request.json()
 
-  // Fetch session to get subject_id
-  const { data: session } = await supabase
+  if (!sessionId || typeof message !== 'string' || !message.trim()) {
+    return NextResponse.json({ error: 'sessionId and message are required' }, { status: 400 })
+  }
+
+  const { data: session, error: sessionError } = await supabase
     .from('ai_chat_sessions')
     .select('*, subjects(*, subject_info(*))')
     .eq('id', sessionId)
     .single()
 
-  if (!session) {
-    return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+  if (sessionError || !session) {
+    return NextResponse.json(
+      { error: sessionError?.message || 'Session not found' },
+      { status: 404 }
+    )
   }
 
-  // Build subject context from teacher's data
-  const subject = (session as any).subjects
-  const infoEntries = subject?.subject_info || []
+  const rawSubject = (session as { subjects?: Record<string, unknown> | Record<string, unknown>[] | null })
+    .subjects
+  const subject = Array.isArray(rawSubject) ? rawSubject[0] : rawSubject
+  let infoEntries = (subject?.subject_info as Record<string, unknown>[] | undefined) || []
+
+  if (subject?.id && (!Array.isArray(infoEntries) || infoEntries.length === 0)) {
+    const { data: rows } = await supabase
+      .from('subject_info')
+      .select('category, title, content')
+      .eq('subject_id', subject.id as string)
+      .order('created_at', { ascending: true })
+    if (rows?.length) infoEntries = rows
+  }
   let subjectContext = `Subject: ${subject?.name || 'Unknown'}\n`
   if (subject?.description) subjectContext += `Description: ${subject.description}\n`
   subjectContext += '---\n'
@@ -34,7 +50,10 @@ export async function POST(request: Request) {
     subjectContext += 'No information has been provided by the teacher yet.\n'
   } else {
     for (const info of infoEntries) {
-      subjectContext += `[${info.category.toUpperCase()}] ${info.title}: ${info.content}\n`
+      const cat = String((info as { category?: string }).category || 'general').toUpperCase()
+      const title = String((info as { title?: string }).title || '')
+      const content = String((info as { content?: string }).content || '')
+      subjectContext += `[${cat}] ${title}: ${content}\n`
     }
   }
 
@@ -51,12 +70,18 @@ export async function POST(request: Request) {
     content: msg.content,
   }))
 
-  // Insert user message first
-  await supabase.from('ai_messages').insert({
+  const { error: userInsertError } = await supabase.from('ai_messages').insert({
     session_id: sessionId,
     role: 'user',
     content: message,
   })
+
+  if (userInsertError) {
+    return NextResponse.json(
+      { error: 'Could not save your message: ' + userInsertError.message },
+      { status: 400 }
+    )
+  }
 
   // Call Gemini
   try {
@@ -94,10 +119,8 @@ export async function POST(request: Request) {
       teacherId: subject?.teacher_id,
       subjectId: subject?.id,
     })
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: 'AI service error: ' + (error.message || 'Unknown error') },
-      { status: 500 }
-    )
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: 'AI service error: ' + msg }, { status: 500 })
   }
 }

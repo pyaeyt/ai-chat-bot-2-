@@ -8,6 +8,7 @@ import { useRealtimeMessages } from '@/hooks/useRealtimeMessages'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
+import ChatThreadShell from '@/components/dashboard/ChatThreadShell'
 import { cn } from '@/lib/utils'
 import { formatTime } from '@/lib/utils'
 import type { DirectMessage, Conversation, Profile } from '@/types'
@@ -87,17 +88,25 @@ export default function StudentDMPage() {
     setSending(false)
   }
 
-  if (loading) return <Spinner className="mt-12" />
+  if (loading) {
+    return (
+      <div className="flex flex-1 min-h-[50dvh] items-center justify-center">
+        <Spinner className="w-8 h-8" />
+      </div>
+    )
+  }
 
   const otherUser = (conversation as any)?.teacher
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] -m-6">
+    <ChatThreadShell>
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-white">
+      <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-white shrink-0">
         <button
+          type="button"
           onClick={() => router.push('/student/messages')}
-          className="p-2 rounded-xl hover:bg-surface-dark transition-colors"
+          className="p-2 rounded-xl hover:bg-surface-dark transition-colors touch-manipulation shrink-0"
+          aria-label="Back to messages"
         >
           <svg className="w-5 h-5 text-text-light" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -115,7 +124,7 @@ export default function StudentDMPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-3 sm:py-4 space-y-3 bg-surface">
         {messages.length === 0 && (
           <div className="text-center py-12">
             <p className="text-text-light">Send a message to start the conversation</p>
@@ -127,7 +136,7 @@ export default function StudentDMPage() {
           return (
             <div key={msg.id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
               <div className={cn(
-                'max-w-[75%] rounded-2xl px-4 py-2.5',
+                'max-w-[min(88%,20rem)] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 sm:px-4',
                 isMe
                   ? 'bg-primary text-white rounded-br-md'
                   : 'bg-white border border-border text-text rounded-bl-md shadow-sm'
@@ -147,23 +156,27 @@ export default function StudentDMPage() {
       </div>
 
       {/* Input */}
-      <form onSubmit={sendMessage} className="px-6 py-4 border-t border-border bg-white">
-        <div className="flex gap-3">
+      <form
+        onSubmit={sendMessage}
+        className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-white shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex gap-2 sm:gap-3 max-w-4xl mx-auto w-full">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a message..."
-            className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-text placeholder:text-text-light/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            className="flex-1 min-w-0 px-3.5 py-3 sm:px-4 text-base sm:text-sm rounded-xl border border-border bg-surface text-text placeholder:text-text-light/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             disabled={sending}
+            enterKeyHint="send"
           />
-          <Button type="submit" disabled={!input.trim() || sending} className="px-5">
+          <Button type="submit" disabled={!input.trim() || sending} className="px-4 sm:px-5 shrink-0 touch-manipulation">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </Button>
         </div>
       </form>
-    </div>
+    </ChatThreadShell>
   )
 }
