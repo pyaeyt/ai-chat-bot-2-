@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { cn } from '@/lib/utils'
+import { mapSupabaseAuthError } from '@/lib/authErrors'
 
 export default function RegisterForm() {
   const router = useRouter()
@@ -14,18 +15,22 @@ export default function RegisterForm() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'student' | 'teacher'>('student')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setInfo('')
     setLoading(true)
 
     const supabase = createClient()
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: origin ? `${origin}/auth/callback` : undefined,
         data: {
           full_name: fullName,
           role,
@@ -34,18 +39,28 @@ export default function RegisterForm() {
     })
 
     if (authError) {
-      setError(authError.message)
+      setError(mapSupabaseAuthError(authError.message))
       setLoading(false)
       return
     }
 
-    if (data.user) {
-      // Set role cookie for middleware
+    if (data.session && data.user) {
       document.cookie = `user_role=${role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
-
       router.push(role === 'teacher' ? '/teacher' : '/student')
       router.refresh()
+      return
     }
+
+    if (data.user && !data.session) {
+      setInfo(
+        'Check your email and confirm your account, then sign in here. ' +
+          'For local testing without email, turn off “Confirm email” in Supabase → Authentication → Providers → Email.'
+      )
+      setLoading(false)
+      return
+    }
+
+    setLoading(false)
   }
 
   return (
@@ -58,6 +73,12 @@ export default function RegisterForm() {
       {error && (
         <div className="bg-red-50 text-red-700 text-sm p-3 rounded-xl border border-red-100">
           {error}
+        </div>
+      )}
+
+      {info && (
+        <div className="bg-emerald-50 text-emerald-800 text-sm p-3 rounded-xl border border-emerald-100">
+          {info}
         </div>
       )}
 

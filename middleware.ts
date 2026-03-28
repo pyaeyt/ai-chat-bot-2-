@@ -31,6 +31,25 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  let roleCookie = request.cookies.get('user_role')?.value
+
+  if (user && !roleCookie) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role === 'teacher' || profile?.role === 'student') {
+      roleCookie = profile.role
+      supabaseResponse.cookies.set('user_role', profile.role, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+      })
+    }
+  }
+
   const publicRoutes = ['/', '/login', '/register']
   const isPublicRoute = publicRoutes.includes(pathname)
   const isAuthCallback = pathname.startsWith('/auth/callback')
@@ -49,8 +68,6 @@ export async function middleware(request: NextRequest) {
 
   // Logged in - check role for routing
   if (user) {
-    const roleCookie = request.cookies.get('user_role')?.value
-
     if (roleCookie) {
       // Redirect authenticated users away from auth pages
       if (isPublicRoute && (pathname === '/login' || pathname === '/register')) {

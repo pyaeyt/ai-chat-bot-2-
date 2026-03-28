@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import { mapSupabaseAuthError } from '@/lib/authErrors'
 
 export default function LoginForm() {
   const router = useRouter()
@@ -25,23 +26,29 @@ export default function LoginForm() {
     })
 
     if (authError) {
-      setError(authError.message)
+      setError(mapSupabaseAuthError(authError.message))
       setLoading(false)
       return
     }
 
     if (data.user) {
-      // Fetch profile to get role
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', data.user.id)
         .single()
 
-      // Set role cookie for middleware
-      document.cookie = `user_role=${profile?.role || 'student'}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+      if (profileError || !profile) {
+        setError(
+          'Your account has no profile yet. If the database trigger is missing, run the migration SQL in Supabase, or wait a moment and try again.'
+        )
+        setLoading(false)
+        return
+      }
 
-      router.push(profile?.role === 'teacher' ? '/teacher' : '/student')
+      document.cookie = `user_role=${profile.role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+
+      router.push(profile.role === 'teacher' ? '/teacher' : '/student')
       router.refresh()
     }
   }
